@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import {format, parseISO} from 'date-fns';
 
 const ReservationForm = () => {
   const [firstName, setFirstName] = useState('');
@@ -14,68 +15,78 @@ const ReservationForm = () => {
 
   useEffect(() => {
     const fetchAvailableTables = async () => {
-      if (!dateTime || !numberOfGuests) {
-        setTables([]); // Clear tables if no date or guests
-        return;
-      }
+        if (!dateTime || !numberOfGuests) {
+            setTables([]); // Clear tables if no date or guests
+            return;
+        }
 
-      const selectedDate = new Date(dateTime);
-      const selectedHour = selectedDate.getHours();
-      const selectedMinutes = selectedDate.getMinutes();
+        const selectedDate = new Date(dateTime);
+        const selectedHour = selectedDate.getHours();
+        const selectedMinutes = selectedDate.getMinutes();
 
-      // Check if the selected time is within opening hours (17:00 to 23:00)
-      if (selectedHour < 17 || (selectedHour === 23 && selectedMinutes > 0)) {
-        setTables([]); // Clear tables if time is before opening
-        return;
-      }
+        // Check if the selected time is within opening hours (17:00 to 23:00)
+        if (selectedHour < 17 || (selectedHour === 23 && selectedMinutes > 0) || selectedHour > 23) {
+            setTables([]); // Clear tables if time is before opening
+            return;
+        }
 
-      try {
-        const response = await axios.get(`${API_URL}api/Tables/availableTables`, {
-          params: {
-            reservationDate: dateTime,
-            numberOfGuests: numberOfGuests,
-          },
-        });
-        setTables(response.data);
-      } catch (error) {
-        console.error("Error fetching tables:", error);
-      }
+        try {
+            const response = await axios.get(`${API_URL}api/Tables/availableTables`, {
+                params: {
+                    reservationDate: dateTime,
+                    numberOfGuests: numberOfGuests,
+                },
+            });
+
+            // Update tables state with available tables
+            if (response.data && Array.isArray(response.data)) {
+                setTables(response.data);
+            } else {
+                setTables([]); // Clear tables if no available tables found
+            }
+        } catch (error) {
+            console.error("Error fetching tables:", error);
+        }
     };
 
     fetchAvailableTables();
-  }, [dateTime, numberOfGuests]);
+}, [dateTime, numberOfGuests]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+  
     try {
       const customerResponse = await axios.post(`${API_URL}api/Customers/createCustomer`, {
         firstName,
         lastName,
         phoneNumber,
       });
-
+  
       const customerId = customerResponse.data.customerID;
-
+  
       if (!customerId) {
         throw new Error("Customer ID is not defined.");
       }
-
+  
       if (!selectedTable) {
         throw new Error("Selected Table ID is not defined.");
       }
-
+  
+      // Convert local dateTime to UTC using date-fns
+      const reservationDateTimeUTC = format(parseISO(dateTime), "yyyy-MM-dd'T'HH:mm:ssxxx");
+  
       const reservationPayload = {
         TableID: selectedTable,
         CustomerID: customerId,
-        Time: new Date(dateTime),
+        Time: reservationDateTimeUTC, // Use UTC time
         NumberOfGuests: numberOfGuests,
       };
-
+  
       const reservationResponse = await axios.post(`${API_URL}api/Reservations/createReservation`, reservationPayload);
       alert("Reservation successful!");
       window.location.href = "https://localhost:7253/";
-
+  
       setFirstName('');
       setLastName('');
       setPhoneNumber('');
@@ -87,6 +98,7 @@ const ReservationForm = () => {
       alert("There was an error making the reservation: " + error.message);
     }
   };
+  
 
   return (
     <div className="container mt-5">
