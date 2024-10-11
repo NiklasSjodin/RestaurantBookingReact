@@ -9,12 +9,25 @@ const ReservationForm = () => {
   const [dateTime, setDateTime] = useState('');
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState('');
-  const [reservationSuccess, setReservationSuccess] = useState(false); // Ny state för reservationens framgång
+  const [reservationSuccess, setReservationSuccess] = useState(false);
   const API_URL = 'https://localhost:7037/';
 
   useEffect(() => {
     const fetchAvailableTables = async () => {
-      if (!dateTime || !numberOfGuests) return;
+      if (!dateTime || !numberOfGuests) {
+        setTables([]); // Clear tables if no date or guests
+        return;
+      }
+
+      const selectedDate = new Date(dateTime);
+      const selectedHour = selectedDate.getHours();
+      const selectedMinutes = selectedDate.getMinutes();
+
+      // Check if the selected time is within opening hours (17:00 to 23:00)
+      if (selectedHour < 17 || (selectedHour === 23 && selectedMinutes > 0)) {
+        setTables([]); // Clear tables if time is before opening
+        return;
+      }
 
       try {
         const response = await axios.get(`${API_URL}api/Tables/availableTables`, {
@@ -28,7 +41,7 @@ const ReservationForm = () => {
         console.error("Error fetching tables:", error);
       }
     };
-  
+
     fetchAvailableTables();
   }, [dateTime, numberOfGuests]);
 
@@ -36,61 +49,44 @@ const ReservationForm = () => {
     e.preventDefault();
 
     try {
-        // Skapa en ny kund
-        const customerResponse = await axios.post(`${API_URL}api/Customers/createCustomer`, {
-            firstName,
-            lastName,
-            phoneNumber,
-        });
-        console.log("Customer response:", customerResponse.data);
+      const customerResponse = await axios.post(`${API_URL}api/Customers/createCustomer`, {
+        firstName,
+        lastName,
+        phoneNumber,
+      });
 
-        const customerId = customerResponse.data.customerID; // Använd små bokstäver
+      const customerId = customerResponse.data.customerID;
 
-        // Logga customerId för att kontrollera om det är korrekt
-        console.log("Customer ID being used:", customerId);
+      if (!customerId) {
+        throw new Error("Customer ID is not defined.");
+      }
 
-        // Kontrollera att ID:t finns innan du gör reservationen
-        if (!customerId) {
-            throw new Error("Customer ID is not defined.");
-        }
+      if (!selectedTable) {
+        throw new Error("Selected Table ID is not defined.");
+      }
 
-        // Kontrollera att selectedTableID finns innan du gör reservationen
-        if (!selectedTable) {
-            throw new Error("Selected Table ID is not defined.");
-        }
+      const reservationPayload = {
+        TableID: selectedTable,
+        CustomerID: customerId,
+        Time: new Date(dateTime),
+        NumberOfGuests: numberOfGuests,
+      };
 
-        // Skapa en reservation
-        const reservationPayload = {
-            TableID: selectedTable, // Kontrollera att detta är ett korrekt ID
-            CustomerID: customerId, // Använd det genererade ID:t
-            Time: new Date(dateTime),
-            NumberOfGuests: numberOfGuests,
-        };
-        
-        console.log("Reservation payload:", reservationPayload); // Logga payloaden
+      const reservationResponse = await axios.post(`${API_URL}api/Reservations/createReservation`, reservationPayload);
+      alert("Reservation successful!");
+      window.location.href = "https://localhost:7253/";
 
-        // Skicka reservationen
-        const reservationResponse = await axios.post(`${API_URL}api/Reservations/createReservation`, reservationPayload);
-        console.log("Reservation response:", reservationResponse.data); // Logga svaret från reservationen
-
-        alert("Reservation successful!");
-
-        // Navigera tillbaka till indexsidan
-        window.location.href = "https://localhost:7253/"; // Ändra till din faktiska index URL
-
-        // Återställ formuläret
-        setFirstName('');
-        setLastName('');
-        setPhoneNumber('');
-        setNumberOfGuests(1);
-        setDateTime('');
-        setSelectedTable(''); // Använd null istället för en tom sträng för val av bord
+      setFirstName('');
+      setLastName('');
+      setPhoneNumber('');
+      setNumberOfGuests(1);
+      setDateTime('');
+      setSelectedTable('');
     } catch (error) {
-        console.error("Error making reservation:", error);
-        alert("There was an error making the reservation: " + error.message); // Ge mer specifik felinformation
+      console.error("Error making reservation:", error);
+      alert("There was an error making the reservation: " + error.message);
     }
-};
-
+  };
 
   return (
     <div className="container mt-5">
